@@ -1,0 +1,102 @@
+# Simple Step-by-Step Guide — Read This Before You Go
+
+I'll use plain, everyday language and simple comparisons throughout, since you said you want to really *get* this, not just memorize it.
+
+---
+
+## PART 1 — Step by Step: Getting Your PC and Phone Talking to Each Other
+
+Think of this like setting up a small private radio station. Your laptop is the radio station (Django), and your phone is the radio listening in. For the phone to hear the station, both need to be tuned to the same channel — that channel is your phone's hotspot.
+
+**Step 1 — Turn on your phone's hotspot.**
+Why: This creates a small private WiFi "room." Only devices that join this exact room can talk to each other. You are now the owner of that room, so nobody else's network rules can interfere with it.
+
+**Step 2 — Connect your laptop to that hotspot (not the office WiFi).**
+Why: Office WiFi networks often deliberately stop two devices on the same network from "seeing" each other, for security reasons — even though both show "connected," they're like two people in the same building but locked in separate rooms with no door between them. Your own hotspot has no such lock.
+
+**Step 3 — On your laptop, run `ipconfig` and find the new IP address.**
+Why: Every device on a network has its own "address," like a house number. Your laptop just moved to a new neighborhood (the hotspot), so it got a brand new house number. Your phone needs to know this exact new number to find it.
+
+**Step 4 — Open `lib/config/api_config.dart` in your Flutter project, change `serverIp` to that new number, then run `flutter run` to reinstall the app on your phone.**
+Why: Your phone app was built remembering the *old* house number. If you don't update it, it's like trying to deliver a letter to an address that no longer exists — it simply won't arrive. This number is baked into the app when it's built, so the app must be rebuilt once with the new number.
+
+**Step 5 — In Django's `settings.py`, add that same new IP to `ALLOWED_HOSTS`, and register it as a Domain (the shell command you've used before).**
+Why: Your Django server checks every visitor against an approved list before letting them in, like a guard with a clipboard. If the new address isn't on that clipboard, the guard turns the phone away — even though the phone dialed the correct number.
+
+**Step 6 — Start Django: `python manage.py runserver 0.0.0.0:8000`**
+Why: This switches the radio station ON. The `0.0.0.0` part specifically means "broadcast to the whole room," not just to yourself. Without it, Django only listens to itself — like a radio station that can only hear its own echo, deaf to anyone else, including your phone.
+
+**Step 7 — If you're demonstrating web login, also start Keycloak: `kc.bat start-dev --http-port=8180`**
+Why: Keycloak is a separate helper program that checks passwords for the web system. If it's not switched on, the web login simply has nobody to ask "is this password correct?"
+
+**Step 8 — Test everything yourself BEFORE you're in front of your supervisor: open the browser and log in, open the phone app and log in.**
+Why: You want to discover any problem now, calmly, alone — not for the first time while your supervisor is watching.
+
+---
+
+## PART 2 — Why Must the Phone and Laptop Be on the Same WiFi?
+
+Think of WiFi as a room. Two people can only pass notes directly to each other if they're standing in the *same* room. If your phone is in "Room A" and your laptop is in "Room B," there is no direct path between them — they simply cannot find each other at all, no matter how correct the address is. The hotspot puts both devices in the exact same room, with you as the only person controlling who's allowed in.
+
+---
+
+## PART 3 — Do You Actually Need "Internet"?
+
+Here's something worth clarifying, because it removes a common confusion: **you do not need real internet access for this demo to work.** Django, Keycloak, and your database all run *locally*, directly on your laptop — they are not hosted anywhere on the actual internet. The hotspot is only creating a small **private local network** between your phone and your laptop. Your phone doesn't even need mobile data turned on for this to work — hotspot mode creates the WiFi signal regardless. The only thing happening is your phone and laptop talking *directly to each other*, nothing goes out to the wider internet at all.
+
+---
+
+## PART 4 — Keycloak, Explained Simply
+
+**What Keycloak actually is:** picture a security guard who sits at the main entrance of a big office building with many different departments inside. You show your ID card to that ONE guard, once, and then you can walk into any department in the building without showing your ID again at each door. Keycloak is that guard. It checks your password once, and any system connected to it can trust that you are who you say you are, without checking your password itself.
+
+**What it does in our system:** when someone logs into the web platform, they don't type their password into our own Django code at all — they type it directly into Keycloak's own page. Keycloak checks it, and tells Django "yes, this is a real person, here is their role and ministry." Django never even touches the raw password.
+
+**Why mobile doesn't use Keycloak the same way:** going through Keycloak on the web means the browser gets *redirected* to Keycloak's page and back — like walking over to the guard's desk and walking back. On a phone, doing that same walk would mean the app opens an external browser window just to type a password, then jumps back into the app. That feels clunky and confusing on a small screen. So instead, the mobile app sends the password straight to our own Django system, which checks it directly and hands back the same kind of "pass" (a token) that Keycloak would have given.
+
+**Why web "uses" Keycloak but mobile "skips" it — is this a contradiction?** No. Think of it as two different ways of reaching the exact same result, not one being secure and the other not. Both end with the same outcome: a signed pass proving who you are, what role you have, and which ministry you belong to. Web gets that pass *by going through the guard*. Mobile gets the *exact same kind of pass by asking Django directly*. The destination is identical — only the route there is different, and we chose the simpler route for mobile because the extra benefit of going through the guard doesn't matter as much for a phone used by one field officer for one app.
+
+---
+
+## PART 5 — "Why Not Just Use One Simple Normal Login for Everyone, and Put Other Groups in the Sidebar?"
+
+This is a genuinely good question to think through, so let's be completely honest about it rather than just defending Keycloak blindly.
+
+**Could we?** Yes, technically. We could remove Keycloak entirely, use a simple Django username-and-password login for the web too (exactly like mobile already does), and other groups' systems could simply be links in a sidebar.
+
+**So why didn't we just do that?** Because a simple login solves a *different, smaller* problem than what Keycloak solves. A simple login proves "this password is correct *for this one system*." Keycloak proves "this password is correct, and *every other connected system can trust that too, without asking again*." That second thing — one password working across many *separately built* systems — is the real value of SSO (Single Sign-On), and a simple login alone cannot give you that. If every group built their own simple login, a government worker using five different systems would still need five different passwords, just like before computers made this easier.
+
+**Here's the honest trade-off, in plain words:**
+
+| If we used Keycloak (what we did) | If we used one simple shared login instead |
+|---|---|
+| One password really does work across many different systems built by different people | Each separately-built system still needs its own password, unless they all share one database directly |
+| Built on a tested, internationally trusted tool, not our own homemade security code | We'd be inventing our own mini version of Keycloak ourselves, with more risk of mistakes |
+| Easy to say in our defense: "we used an industry standard, not something we wrote ourselves" | Harder to defend: "we wrote our own central login system" sounds riskier to a security-focused examiner |
+
+**The honest summary to say to your supervisor:** "We could have used one simple shared login for everything, but that would mean we were quietly rebuilding our own version of Keycloak by hand. Using Keycloak directly gives us the same single-login benefit using a proven, tested, industry-standard tool instead of homemade security code — which is a stronger thing to say in a project specifically about being *secure*."
+
+---
+
+## PART 6 — What Have We Actually Completed So Far?
+
+A clean list you can say confidently, no hesitation:
+
+**Security features (9):**
+1. Single Sign-On login through Keycloak (web)
+2. Five user roles, each seeing only what they're allowed to
+3. Wrong-password lockout after 5 tries, for 15 minutes (both web and mobile)
+4. A history log of every action that nobody — not even the top Admin — can edit or delete
+5. Each ministry's data kept in its own separate, walled-off part of the database
+6. Safety headers that stop certain common web attacks
+7. Login passes (tokens) that expire after 30 minutes and can't be reused once replaced
+8. Secure, time-limited browser sessions
+9. A written security log file recording login attempts and blocked access
+
+**Working features:**
+- Full web platform: login, dashboard, asset register (add/view/edit/delete), user management, ministry management, organisation structure, history log
+- Full mobile app: login, dashboard, asset list, asset details, add/edit assets, profile
+- A documented set of connection points (API) that the mobile app uses, and that any other group's system could also use
+- Demo-ready, clean sample data already loaded for both ministries
+
+That's everything, ready for tomorrow. You understand this well enough already — trust that, breathe, and go in confident.

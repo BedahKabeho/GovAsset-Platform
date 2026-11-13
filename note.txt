@@ -1,0 +1,121 @@
+
+
+-> becouse keycloak uses port 8080, and that port is used by apache
+   in my pc.Now everytime to run in cmd:
+
+cd C:\keycloak\bin
+kc.bat start-dev --http-port=8180
+
+👉 so now our keycloak port will be 8180.
+
+now run 
+
+
+our keycloak client secret   -> i9bDUIzrXNATomD5IAtxuowZDmsHKqfb
+
+
+                  
+   UUID of users  in gova asset realm
+       mnh manager 05b67fca-fdd2-4dd1-958e-6ee332fb8803
+       mof admin   8ce2147b-73ad-430f-9b5d-4749bd5b80bc
+       moh admin e268214b-23bf-4d7c-8b0d-6f1227048eb5
+       moh auditor  6f0987fe-6ffd-4ea8-9c27-5b62151fc661
+       rad clerk    c648a5e9-63b3-4c62-aeb7-4014f4dacbd9
+       superadmin 5f742d7b-c46f-4a95-898a-6932face665d 
+                  5f742d7b-c46f-4a95-898a-6932face665d
+
+
+
+Test each user:
+| Username    | Password  | Expected Result                                       |
+| ----------- | --------- | ----------------------------------------------------- |
+| superadmin  | Admin@123 | Dashboard shows Platform Overview, no ministry schema |
+| moh_admin   | Admin@123 | Dashboard shows moh_schema                            |
+| mnh_manager | Admin@123 | Dashboard shows moh_schema                            |
+| rad_clerk   | Admin@123 | Dashboard shows moh_schema                            |
+| moh_auditor | Admin@123 | Dashboard shows moh_schema                            |
+| mof_admin   | Admin@123 | Dashboard shows mof_schema                            |
+
+
+TO RUN APP
+
+Make sure Django is running first:
+bash# In Django terminal
+cd D:\government_asset_platform
+venv\Scripts\activate
+python manage.py runserver 0.0.0.0:8000
+
+Important — 0.0.0.0:8000 instead of just runserver
+This makes Django listen on all network interfaces — not just localhost. Without this your phone cannot reach it even on the same WiFi. Your laptop IP 192.168.100.18 only works when Django binds to 0.0.0.0.
+
+Then run Flutter:
+bash# In Flutter terminal
+cd C:\Users\Hemed\govasset_mobile
+flutter run
+
+
+
+in swagger, first we need to go to 
+POST /api/auth/login/ then put our credentials then we will get access and refresh tokes
+take acces token without "" , then go to authorize,in the field of value put the access toke but start with 
+the word Bearer <then_toke_here>
+
+then you can go through other linsks like
+GET  /api/assets/         → 200 with asset list
+GET  /api/dashboard/stats/ → 200 with statistics
+GET  /api/org-units/      → 200 with hierarchy
+GET  /api/audit-logs/     → 200 with logs
+GET  /api/auth/verify-token/ → 200 with user info
+
+
+
+
+
+
+
+
+HOW TO RUN
+# Step 1 — Deactivate whatever venv is currently active
+deactivate
+
+# Step 2 — Go to your correct project folder
+cd D:\government_asset_platform
+
+# Step 3 — Activate the correct venv
+venv\Scripts\activate
+
+# Step 4 — Confirm you are in the right venv
+# You should see (venv) PS D:\government_asset_platform>
+# NOT (venv) PS D:\massstore-backend>
+
+# Step 5 — Confirm Django version is correct
+python -c "import django; print(django.__version__)"
+
+# Step 6 — Run the server
+python manage.py runserver 0.0.0.0:8000
+
+
+LAPTOP SETUP:
+School WiFi IP confirmed with ipconfig
+ALLOWED_HOSTS updated with school IP
+Domain registered in database for school IP
+api_config.dart updated with school IP
+Django server tested: python manage.py runserver 0.0.0.0:8000
+Keycloak server tested: kc.bat start-dev --http-port=8180
+Browser opened at http://localhost:8000
+Swagger opened at http://localhost:8000/api/docs/
+Flutter app installed on phone with correct IP
+
+PHONE SETUP:
+ Phone hotspot ON (backup plan if school WiFi blocks connections)
+App installed and tested
+Login works on phone
+USB cable available (in case you need to reinstall)
+
+DATA SETUP:
+python manage.py setup_demo_data (run the night before)
+All 6 test users work
+MOH has 9 professional assets
+MOF has 4 professional assets
+Expiry warnings showing on dashboard
+

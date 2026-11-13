@@ -1,0 +1,82 @@
+To install your Flutter app on your Android phone:
+
+### 1. Connect your phone
+
+* Enable **Developer Options** on your phone.
+* Enable **USB Debugging**.
+* Connect the phone via USB.
+
+Check that Flutter sees it:
+
+```bash
+flutter devices
+```
+You should see your phone listed.
+---
+
+### 2. Run directly from Flutter
+
+```bash
+flutter run
+```
+
+This builds and installs the app on the connected phone automatically.
+
+If multiple devices are connected:
+
+```bash
+flutter run -d <device_id>
+```
+
+You can get the device ID from:
+
+```bash
+flutter devices
+```
+
+---
+
+### 3. Build an APK for manual installation
+
+Create an APK:
+
+```bash
+flutter build apk --release
+```
+
+The APK will be generated at:
+
+```text
+build/app/outputs/flutter-apk/app-release.apk
+```
+
+Transfer the APK to your phone and tap it to install.
+
+You may need to allow **Install unknown apps** in Android settings.
+
+---
+
+### 4. For Play Store submission
+
+Build an App Bundle:
+
+```bash
+flutter build appbundle
+```
+
+Output:
+
+```text
+build/app/outputs/bundle/release/app-release.aab
+```
+
+This `.aab` file is what you upload to the Play Store.
+
+---
+
+If you tell me:
+
+* Windows, macOS, or Linux?
+* Android or iPhone?
+
+I can give the exact steps for your setup.

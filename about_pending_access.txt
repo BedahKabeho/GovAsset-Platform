@@ -1,0 +1,214 @@
+## What PendingAccess Is For
+
+PendingAccess exists to handle exactly one specific scenario:
+
+> **Someone successfully authenticates with Keycloak (correct username and password), but Django has no matching user account for them.**
+
+This is NOT about wrong passwords. Wrong passwords are rejected entirely by Keycloak itself, before Django is ever involved.
+
+---
+## The Critical Distinction — Authentication vs Authorization
+
+This is the concept you must understand clearly:
+```
+AUTHENTICATION = "Are you who you say you are?"
+                  → Handled by Keycloak
+                  → Checks username + password
+
+AUTHORIZATION  = "Do you have permission to use THIS system?"
+                  → Handled by Django
+                  → Checks if a CustomUser profile exists
+```
+
+PendingAccess deals only with the second one. A person can pass authentication (Keycloak knows them) but fail authorization (Django has no profile for them).---
+
+## Scenario 1 — Wrong Password (Does NOT create PendingAccess)```
+User types wrong password on Keycloak's login page
+        ↓
+Keycloak checks against its own user store
+        ↓
+Keycloak rejects immediately — "invalid credentials"
+        ↓
+Browser never even reaches Django
+        ↓
+NO PendingAccess record created
+NO Django code runs at all
+```
+
+Keycloak handles this entirely on its own. If you enabled Keycloak's Brute Force Detection (which we discussed in Phase 5), Keycloak also locks the account after 5 failures — again, entirely inside Keycloak, never touching Django.---
+
+## Scenario 2 — Correct Keycloak Login, No Django Profile (Creates PendingAccess)```
+User types CORRECT password for a Keycloak account
+        ↓
+Keycloak verifies it successfully ✓
+        ↓
+Keycloak issues a token and redirects to:
+http://localhost:8000/oidc/callback/?code=XXXX
+        ↓
+Django's GovAssetOIDCBackend.filter_users_by_claims() runs
+        ↓
+Searches CustomUser by keycloak_id → not found
+Searches CustomUser by username → not found
+        ↓
+Because nothing was found, create_user() is called
+        ↓
+create_user() does NOT auto-create the user (security decision)
+Instead it creates a PendingAccess record:
+    username, email, full_name, keycloak_id, status='PENDING'
+        ↓
+Returns None → login is BLOCKED
+        ↓
+User sees: "Previous login attempt failed. Please try signing in again."
+```
+
+This is exactly what happened in our earlier `ghost_user` test — remember the logs showed:
+
+```
+WARNING ... OIDC: No Django user found for Keycloak user: ghost_user
+WARNING ... OIDC: No Django user found... Access blocked.
+```
+
+That warning is the exact moment a PendingAccess record gets created.
+
+---
+
+## Does This Apply to Mobile / API Login?
+
+**No.** Mobile login (`POST /api/auth/login/`) never touches `GovAssetOIDCBackend` at all. It calls Django's `authenticate()` directly against the Django database. If the username does not exist in Django, it simply returns "Invalid username or password" — no PendingAccess record, because the OIDC flow was never involved.
+
+PendingAccess is **strictly a web SSO concept**.
+
+---
+
+## What Happens After a PendingAccess Record Is Created
+
+The Super Admin or Ministry Admin reviews it:
+
+```
+Login as superadmin or moh_admin
+        ↓
+Go to Pending Access page
+        ↓
+See: username, full name, email, keycloak_id, status=PENDING, timestamp
+        ↓
+Click "Review"
+        ↓
+Two choices:
+    APPROVE → admin goes to User Management and creates
+              a Django profile with proper role + ministry_schema
+              using the SAME username so next login matches
+    REJECT  → status changes to REJECTED
+              user remains permanently blocked
+              (filter_users_by_claims still finds nothing,
+               create_user still returns None forever)
+```
+
+---
+
+## How to Test It Step by Step Right Now
+
+This is exactly how we tested it before — repeat these steps to verify it still works after all our changes.
+
+### Step 1 — Create a Keycloak-only user (no Django profile)
+
+1. Go to `http://localhost:8180`
+2. Log in as Keycloak admin
+3. Go to **Users** → **Create new user**
+4. Username: `test_pending`
+5. Email: `testpending@example.com`
+6. First name: `Test`
+7. Last name: `Pending`
+8. Click **Create**
+9. Go to **Credentials** tab → Set password: `Admin@123` → turn off Temporary → **Save**
+
+**Do NOT create a Django profile for this user. Do NOT set role/ministry_schema attributes — that does not matter here.**
+
+### Step 2 — Make sure no leftover Keycloak session exists
+
+Either use an incognito browser window, or clear cookies for `localhost:8180`, or log out of Keycloak first. (Remember the `prompt=login` setting we added prevents ghost sessions — this should already handle it.)
+
+### Step 3 — Attempt login as the new user
+
+1. Go to `http://localhost:8000/login/`
+2. Click **Sign in with Government SSO**
+3. Enter `test_pending` / `Admin@123`
+
+**Expected result:**
+- Keycloak accepts the password (it's a valid Keycloak user)
+- You get redirected back to the login page with an error message
+- Login is blocked
+
+### Step 4 — Check the security log
+
+```bash
+type logs\security.log
+```
+
+You should see something like:
+```
+INFO ... OIDC claims received: {'sub': '...', 'preferred_username': 'test_pending', ...}
+WARNING ... OIDC: No user found for username=test_pending keycloak_id=...
+WARNING ... OIDC: No Django user found for Keycloak user: test_pending ... Access blocked.
+```
+
+### Step 5 — Confirm the PendingAccess record exists
+
+```bash
+python manage.py shell
+```
+```python
+from authentication.models import PendingAccess
+records = PendingAccess.objects.all().order_by('-id')
+for r in records[:5]:
+    print(r.id, r.username, r.email, r.status, r.keycloak_id)
+exit()
+```
+
+You should see `test_pending` with `status='PENDING'`.
+
+### Step 6 — Review it through the web interface
+
+1. Log in as `superadmin` or `moh_admin`
+2. Go to **Pending Access** page
+3. Confirm `test_pending` appears with status PENDING
+4. Click **Review**
+5. Try **Reject** — confirm status changes to REJECTED
+6. Try logging in as `test_pending` again — confirm it is STILL blocked (rejection persists)
+
+### Step 7 — Test the Approve path (optional, full proof)
+
+1. Create a fresh Keycloak-only test user again (e.g. `test_approve`)
+2. Attempt login → blocked → PendingAccess created
+3. Review it as admin → click **Approve** (or whatever your approve action does)
+4. Go to **User Management** → **Create User** → use username `test_approve` exactly matching
+5. Set role = `FACILITY_CLERK`, ministry_schema = `moh_schema`
+6. Log out, log in as `test_approve` / `Admin@123`
+7. Should now succeed — and on this login `filter_users_by_claims()` finds the Django user by username and links `keycloak_id` automatically
+
+---
+
+## Summary Table
+
+| Scenario | Where it's checked | PendingAccess created? |
+|---|---|---|
+| Wrong password on Keycloak page | Keycloak itself | ❌ No |
+| Correct Keycloak password, no Django profile | Django's OIDC backend | ✅ Yes |
+| Correct Keycloak password, Django profile exists | Django's OIDC backend | ❌ No — normal login |
+| Wrong username/password on mobile API login | Django `authenticate()` directly | ❌ No |
+| 5 failed Keycloak attempts (if Brute Force Detection enabled) | Keycloak itself | ❌ No — Keycloak locks account |
+
+---
+
+Run through the test steps above and confirm PendingAccess still works correctly after all our Phase 9/10 changes. Once confirmed, share your prompt for issue one and we'll go through it in full depth.
+
+
+
+
+
+QUESTON
+
+My recommendation: Leave it exactly as it is. If your supervisor ever asks "why does a Ministry Admin see pending requests for other ministries," your honest answer is:
+
+"At the point a login is blocked, the system doesn't yet know which ministry the person belongs to — they have no profile. We deliberately keep that triage decision visible to any reviewing admin so nobody falls through the cracks unreviewed, since the alternative — hiding it — risks a legitimate user being permanently invisible to anyone."
+
+That's a defensible, intentional design answer, not a confession of a bug.

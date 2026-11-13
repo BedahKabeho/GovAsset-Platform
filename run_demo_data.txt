@@ -1,0 +1,55 @@
+Now — How to Run setup_demo_data and What It Does
+What the command does
+setup_demo_data is the management command we built together. It does two things in sequence:
+Step 1 — Cleans test data:
+
+Deletes all LoginAttempt records (from our brute force testing)
+Deletes all PendingAccess records (from our ghost_user testing)
+Deletes all Asset records in every ministry schema (removes test assets like "Test Mobile Asset", "HP LaserJet Printer" etc.)
+Deletes all AuditLog records in every ministry schema (clears the messy testing history)
+
+Step 2 — Seeds professional demo data:
+
+Creates 9 realistic Ministry of Health assets (Dell Laptop, Toyota Land Cruiser, medical equipment etc.)
+Creates 4 realistic Ministry of Finance assets (HP EliteBook, Toyota Fortuner etc.)
+Creates a few clean audit log entries showing login and create actions
+All with proper Tanzanian government context — realistic prices in TZS, proper purchase order numbers, realistic warranty dates
+
+Why you need this
+Right now your database likely has messy test data from all our debugging sessions — assets named "Test Mobile Asset", "HP LaserJet Printer" with random values, and dozens of audit log entries from testing brute force lockouts, ghost users, and trial logins. Walking into a supervisor presentation with this data looks unprofessional.
+Running this command resets everything to clean, realistic, presentation-ready data in one command.
+
+How to run it
+Once the migration above is sorted, run:
+
+python manage.py setup_demo_data
+
+Expected output:
+Cleaning test data...
+  ✓ Cleared login attempts: X
+  ✓ Cleared pending access: X
+  ✓ Cleared X assets from moh_schema
+  ✓ Cleared X audit logs from moh_schema
+  ✓ Cleared X assets from mof_schema
+  ✓ Cleared X audit logs from mof_schema
+  Cleaning complete.
+
+Seeding demo data...
+  Seeding Ministry of Health (moh_schema)...
+  ✓ Created 9 MOH assets
+
+  Seeding Ministry of Finance (mof_schema)...
+  ✓ Created 4 MOF assets
+  Seeding complete.
+
+✓ Demo data setup complete!
+Important: This command will fail if your AssetCategory codes don't match ICT, VEH, FURN, and a category containing "Medical" in the name. Before running it, verify your categories:
+
+
+python manage.py shell
+pythonfrom django_tenants.utils import schema_context
+with schema_context('moh_schema'):
+    from assets.models import AssetCategory
+    for cat in AssetCategory.objects.all():
+        print(cat.id, repr(cat.code), cat.name)
+exit()
